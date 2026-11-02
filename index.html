@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; background: #f2f4f3; color: #222; }
+    .wrap { max-width: 440px; margin: 0 auto; padding: 24px 16px; }
+    .card { background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    #status { font-size: 14px; color: #555; line-height: 1.6; }
+    .btn { display: none; text-align: center; background: #06C755; color: #fff; text-decoration: none; font-weight: 700; padding: 14px; border-radius: 8px; margin-top: 16px; }
+    pre { background: #f6f7f7; border: 1px dashed #bbb; min-height: 44px; border-radius: 8px; padding: 10px; font-size: 11px; white-space: pre-wrap; word-break: break-all; margin: 16px 0 0; color: #444; }
+  </style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+  <h1>LIFF → 会員アプリ</h1>
+  <div id="status">LIFFを初期化しています...</div>
+  <a id="go" class="btn" target="_top">会員アプリへ進む</a>
+  <pre id="log"></pre>
+</div></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+  const CONF = {
+	"liffId": "2012301416-vWdP5qhU",
+  	"targetUrl": "https://script.google.com/macros/s/AKfycbwsZCcGs2cqkdFEcKD5lLca8YjYj3Hv7UrsPc-Vs7Z5EiRQrFuv2v404d2zT4MXJVO7/exec"
+	};
+  const $ = (id) => document.getElementById(id);
+  const log = (m) => { $('log').textContent += m + '\n'; };
+
+  log('1. script start');
+  log('2. SDK: ' + typeof liff);
+  log('3. iframe内: ' + (window.top !== window));
+  log('4. href: ' + location.href);
+  log('5. UA: ' + navigator.userAgent);
+
+  (async () => {
+    try {
+      if (!CONF.liffId || !CONF.targetUrl) throw new Error('スクリプト プロパティ LIFF_ID / TARGET_URL が未設定です');
+
+      log('6. liff.init 開始 (liffId=' + CONF.liffId + ')');
+      await Promise.race([
+        liff.init({ liffId: CONF.liffId }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('liff.init が10秒以内に完了しませんでした')), 10000))
+      ]);
+      log('liff.init OK  inClient=' + liff.isInClient() + '  os=' + liff.getOS());
+
+      if (!liff.isLoggedIn()) {
+        log('未ログイン → liff.login()');
+        liff.login();
+        return;
+      }
+
+      const idt = liff.getIDToken();
+      if (!idt) throw new Error('IDトークンを取得できません (LIFFのスコープに openid が必要です)');
+      log('IDトークン取得 OK (長さ ' + idt.length + ')');
+
+      const url = CONF.targetUrl + (CONF.targetUrl.indexOf('?') >= 0 ? '&' : '?') + 'idt=' + encodeURIComponent(idt);
+      $('go').href = url;
+      $('go').style.display = 'block';
+      $('status').textContent = 'ログインを確認しました。下のボタンで会員アプリへ進みます。';
+
+      // 自動遷移を試す (GASのiframeではブロックされることが多い → その場合はボタンを使う)
+      try { window.top.location.href = url; } catch (e) { log('自動遷移は不可: ボタンを押してください'); }
+    } catch (e) {
+      $('status').textContent = 'エラーが発生しました。';
+      log('ERROR ' + (e.code || '') + ' ' + (e.message || e));
+    }
+  })();
+</script>
+</body>
+</html>
