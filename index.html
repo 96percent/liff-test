@@ -8,160 +8,68 @@
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; background: #f2f4f3; color: #222; }
     .wrap { max-width: 440px; margin: 0 auto; padding: 24px 16px; }
     .card { background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
-    h1 { font-size: 20px; margin: 0 0 16px; }
-    p.sub { color: #666; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
-    .line-btn { display: block; text-align: center; background: #06C755; color: #fff; text-decoration: none; font-weight: 700; padding: 14px; border-radius: 8px; }
-    .line-btn:active { background: #05a847; }
-    label { display: block; font-size: 13px; color: #555; margin: 14px 0 4px; }
-    input[type=text], input[type=email], select { width: 100%; padding: 11px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
-    button { width: 100%; padding: 13px; margin-top: 18px; border: 0; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; background: #06C755; color: #fff; }
-    button.secondary { background: #e8ebea; color: #333; }
-    button.danger { background: #fff; color: #d33; border: 1px solid #d33; }
-    button:disabled { opacity: .5; cursor: default; }
-    .profile { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-    .profile img { width: 56px; height: 56px; border-radius: 50%; background: #ddd; object-fit: cover; }
-    .profile .dn { font-weight: 700; }
-    .profile .uid { font-size: 11px; color: #888; word-break: break-all; }
-    dl { margin: 16px 0 0; font-size: 14px; }
-    dt { color: #888; font-size: 12px; margin-top: 12px; }
-    dd { margin: 2px 0 0; }
-    .msg { margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
-    .msg.err { background: #fdecec; color: #b32424; }
-    .msg.ok { background: #e6f7ec; color: #12703a; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    #status { font-size: 14px; color: #555; line-height: 1.6; }
+    .btn { display: none; text-align: center; background: #06C755; color: #fff; text-decoration: none; font-weight: 700; padding: 14px; border-radius: 8px; margin-top: 16px; }
+    pre { background: #f6f7f7; border: 1px dashed #bbb; min-height: 44px; border-radius: 8px; padding: 10px; font-size: 11px; white-space: pre-wrap; word-break: break-all; margin: 16px 0 0; color: #444; }
   </style>
 </head>
 <body>
-<div class="wrap"><div class="card" id="app"></div></div>
+<div class="wrap"><div class="card">
+  <h1>LIFF → 会員アプリ</h1>
+  <div id="status">LIFFを初期化しています...</div>
+  <a id="go" class="btn" target="_top">会員アプリへ進む</a>
+  <pre id="log"></pre>
+</div></div>
 
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-  const INIT = <?!= initJson ?>;
-  const app = document.getElementById('app');
-  let token = INIT.token || null;
-  let profile = INIT.profile || null;
-  let member = INIT.member || null;
+  const CONF = {
+	"liffId": "2012301416-vWdP5qhU",
+  	"targetUrl": "https://script.google.com/macros/s/AKfycbwsZCcGs2cqkdFEcKD5lLca8YjYj3Hv7UrsPc-Vs7Z5EiRQrFuv2v404d2zT4MXJVO7/exec"
+	};
+  const $ = (id) => document.getElementById(id);
+  const log = (m) => { $('log').textContent += m + '\n'; };
 
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  log('1. script start');
+  log('2. SDK: ' + typeof liff);
+  log('3. iframe内: ' + (window.top !== window));
+  log('4. href: ' + location.href);
+  log('5. UA: ' + navigator.userAgent);
 
-  function profileHtml() {
-    const img = profile && /^https:\/\//.test(profile.pictureUrl) ? `<img src="${esc(profile.pictureUrl)}" alt="">` : '<img alt="">';
-    return `<div class="profile">${img}<div><div class="dn">${esc(profile.displayName)}</div><div class="uid">${esc(profile.userId)}</div></div></div>`;
-  }
+  (async () => {
+    try {
+      if (!CONF.liffId || !CONF.targetUrl) throw new Error('スクリプト プロパティ LIFF_ID / TARGET_URL が未設定です');
 
-  function showMsg(text, ok) {
-    const box = document.getElementById('msg');
-    if (box) box.innerHTML = text ? `<div class="msg ${ok ? 'ok' : 'err'}">${esc(text)}</div>` : '';
-  }
+      log('6. liff.init 開始 (liffId=' + CONF.liffId + ')');
+      await Promise.race([
+        liff.init({ liffId: CONF.liffId }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('liff.init が10秒以内に完了しませんでした')), 10000))
+      ]);
+      log('liff.init OK  inClient=' + liff.isInClient() + '  os=' + liff.getOS());
 
-  function run(btn, fn, onOk) {
-    if (btn) btn.disabled = true;
-    showMsg('');
-    google.script.run
-      .withSuccessHandler((r) => { if (btn) btn.disabled = false; onOk(r); })
-      .withFailureHandler((e) => { if (btn) btn.disabled = false; showMsg(e.message || String(e)); })
-      [fn.name](...fn.args);
-  }
+      if (!liff.isLoggedIn()) {
+        log('未ログイン → liff.login()');
+        liff.login();
+        return;
+      }
 
-  // ---------- views ----------
-  function viewLogin() {
-    app.innerHTML = `
-      <h1>会員ログイン</h1>
-      <p class="sub">LINEアカウントでログイン・新規登録ができます。</p>
-      <a class="line-btn" href="${esc(INIT.loginUrl)}" target="_top">LINEでログイン</a>`;
-  }
+      const idt = liff.getIDToken();
+      if (!idt) throw new Error('IDトークンを取得できません (LIFFのスコープに openid が必要です)');
+      log('IDトークン取得 OK (長さ ' + idt.length + ')');
 
-  function viewError() {
-    app.innerHTML = `
-      <h1>エラー</h1>
-      <div class="msg err">${esc(INIT.message)}</div>
-      ${INIT.loginUrl ? `<a class="line-btn" style="margin-top:18px" href="${esc(INIT.loginUrl)}" target="_top">もう一度ログイン</a>` : ''}`;
-  }
+      const url = CONF.targetUrl + (CONF.targetUrl.indexOf('?') >= 0 ? '&' : '?') + 'idt=' + encodeURIComponent(idt);
+      $('go').href = url;
+      $('go').style.display = 'block';
+      $('status').textContent = 'ログインを確認しました。下のボタンで会員アプリへ進みます。';
 
-  function viewFriend() {
-    app.innerHTML = `
-      <h1>友だち追加のお願い</h1>
-      <p class="sub">ご利用には、公式アカウントの友だち追加が必要です。<br>
-      追加したあと、もう一度ログインしてください。</p>
-      <a class="line-btn" href="${esc(INIT.addFriendUrl)}" target="_top">友だち追加する</a>
-      <a class="line-btn" style="margin-top:12px;background:#e8ebea;color:#333" href="${esc(INIT.loginUrl)}" target="_top">追加したのでログインする</a>`;
-  }
-
-  function viewRegister() {
-    app.innerHTML = `
-      <h1>会員登録</h1>
-      ${profileHtml()}
-      <p class="sub">はじめてのご利用です。以下を入力して登録してください。</p>
-      <label>ニックネーム(本名は入力しないでください)</label><input type="text" id="nickname" maxlength="20" placeholder="例: たろう">
-      <label>居住地(都道府県)</label>${prefSelect('')}
-      <div id="msg"></div>
-      <button id="submit">登録する</button>
-      <button class="secondary" id="logout">キャンセル(ログアウト)</button>`;
-    document.getElementById('submit').onclick = (ev) => {
-      run(ev.target, { name: 'registerMember', args: [token, { nickname: val('nickname'), prefecture: val('prefecture') }] },
-        (m) => { member = m; viewMypage('登録が完了しました'); });
-    };
-    document.getElementById('logout').onclick = doLogout;
-  }
-
-  function viewMypage(notice) {
-    app.innerHTML = `
-      <h1>マイページ</h1>
-      ${profileHtml()}
-      <dl>
-        <dt>ニックネーム</dt><dd>${esc(member.nickname)}</dd>
-        <dt>居住地(都道府県)</dt><dd>${esc(member.prefecture)}</dd>
-        <dt>登録日時</dt><dd>${esc(member.registeredAt)}</dd>
-        <dt>最終ログイン</dt><dd>${esc(member.lastLoginAt)}</dd>
-      </dl>
-      <div id="msg">${notice ? `<div class="msg ok">${esc(notice)}</div>` : ''}</div>
-      <button id="edit">会員情報を編集</button>
-      <button class="secondary" id="logout">ログアウト</button>
-      <button class="danger" id="del">退会する</button>`;
-    document.getElementById('edit').onclick = viewEdit;
-    document.getElementById('logout').onclick = doLogout;
-    document.getElementById('del').onclick = (ev) => {
-      if (!confirm('退会すると会員情報が削除されます。よろしいですか?')) return;
-      run(ev.target, { name: 'deleteMember', args: [token] }, () => {
-        token = null; member = null;
-        app.innerHTML = `<h1>退会しました</h1><p class="sub">ご利用ありがとうございました。</p><a class="line-btn" href="${esc(INIT.loginUrl || '')}" target="_top">トップへ</a>`;
-        reloadTop();
-      });
-    };
-  }
-
-  function viewEdit() {
-    app.innerHTML = `
-      <h1>会員情報の編集</h1>
-      ${profileHtml()}
-      <label>ニックネーム</label><input type="text" id="nickname" maxlength="20" value="${esc(member.nickname)}">
-      <label>居住地(都道府県)</label>${prefSelect(member.prefecture)}
-      <div id="msg"></div>
-      <button id="save">保存</button>
-      <button class="secondary" id="back">戻る</button>`;
-    document.getElementById('save').onclick = (ev) => {
-      run(ev.target, { name: 'updateMember', args: [token, { nickname: val('nickname'), prefecture: val('prefecture') }] },
-        (m) => { member = m; viewMypage('更新しました'); });
-    };
-    document.getElementById('back').onclick = () => viewMypage();
-  }
-
-  function doLogout(ev) {
-    run(ev.target, { name: 'logout', args: [token] }, reloadTop);
-  }
-
-  // /exec?code=... のままだとリロードで失敗するため、トップURLに戻す
-  function reloadTop() {
-    google.script.run.withSuccessHandler(() => {}).logout(null);
-    window.top.location.href = INIT.baseUrl || '<?= ScriptApp.getService().getUrl() ?>';
-  }
-
-  const PREFECTURES = ['北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県', '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県', '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県', '静岡県', '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県', '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県'];
-  const prefSelect = (cur) => `<select id="prefecture"><option value="">選択してください</option>${
-    PREFECTURES.map((f) => `<option value="${esc(f)}"${f === cur ? ' selected' : ''}>${esc(f)}</option>`).join('')}</select>`;
-
-  const val = (id) => document.getElementById(id).value;
-
-  // ---------- boot ----------
-  ({ login: viewLogin, error: viewError, friend: viewFriend, register: viewRegister, mypage: () => viewMypage() }[INIT.view] || viewLogin)();
+      // 自動遷移を試す (GASのiframeではブロックされることが多い → その場合はボタンを使う)
+      try { window.top.location.href = url; } catch (e) { log('自動遷移は不可: ボタンを押してください'); }
+    } catch (e) {
+      $('status').textContent = 'エラーが発生しました。';
+      log('ERROR ' + (e.code || '') + ' ' + (e.message || e));
+    }
+  })();
 </script>
 </body>
 </html>
